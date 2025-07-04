@@ -1,0 +1,15 @@
+{
+  "name": "xiuton",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "xiuton_bg.wasm",
+    "xiuton.js",
+    "xiuton.d.ts"
+  ],
+  "main": "xiuton.js",
+  "types": "xiuton.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

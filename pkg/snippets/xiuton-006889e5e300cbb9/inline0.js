@@ -1,0 +1,1 @@
+export function now_ts() { return Date.now() / 1000; } export function get_elem_size(id) { let e = document.getElementById(id); return e ? [e.offsetWidth, e.offsetHeight] : [0,0]; }
