@@ -70,10 +70,70 @@ impl Terrain {
 }
 
 #[derive(Clone)]
+enum FoodKind {
+    Apple,   // 🍎 +5
+    Banana,  // 🍌 +8
+    Bread,   // 🍞 +10
+    Chicken, // 🍗 +15
+    Cake,    // 🍰 +20
+}
+
+impl FoodKind {
+    fn symbol(&self, eaten: bool) -> char {
+        match (self, eaten) {
+            (FoodKind::Apple, false) => '🍎',
+            (FoodKind::Apple, true) => '🍏',
+            (FoodKind::Banana, false) => '🍌',
+            (FoodKind::Banana, true) => '🍌', // 香蕉皮可用别的符号
+            (FoodKind::Bread, false) => '🍞',
+            (FoodKind::Bread, true) => '🥖',
+            (FoodKind::Chicken, false) => '🍗',
+            (FoodKind::Chicken, true) => '🍖',
+            (FoodKind::Cake, false) => '🍰',
+            (FoodKind::Cake, true) => '🍮',
+        }
+    }
+    fn color(&self, eaten: bool) -> &'static str {
+        match (self, eaten) {
+            (FoodKind::Apple, false) => "#ff3333",
+            (FoodKind::Apple, true) => "#99ff99",
+            (FoodKind::Banana, false) => "#ffe066",
+            (FoodKind::Banana, true) => "#cccc66",
+            (FoodKind::Bread, false) => "#e0b97d",
+            (FoodKind::Bread, true) => "#bfa76f",
+            (FoodKind::Chicken, false) => "#ffbb66",
+            (FoodKind::Chicken, true) => "#d1a05a",
+            (FoodKind::Cake, false) => "#ffb3e6",
+            (FoodKind::Cake, true) => "#ffe6b3",
+        }
+    }
+    fn stamina(&self) -> u32 {
+        match self {
+            FoodKind::Apple => 5,
+            FoodKind::Banana => 8,
+            FoodKind::Bread => 10,
+            FoodKind::Chicken => 15,
+            FoodKind::Cake => 20,
+        }
+    }
+    fn name(&self) -> &'static str {
+        match self {
+            FoodKind::Apple => "苹果",
+            FoodKind::Banana => "香蕉",
+            FoodKind::Bread => "面包",
+            FoodKind::Chicken => "鸡腿",
+            FoodKind::Cake => "蛋糕",
+        }
+    }
+}
+
+#[derive(Clone)]
 enum EntityType {
     Animal,
     Plant,
     Object { collected: bool },
+    Food { eaten: bool, kind: FoodKind },
+    Chest { opened: bool },
 }
 
 #[derive(Clone)]
@@ -96,6 +156,9 @@ struct GameState {
     map: Vec<Vec<Terrain>>,
     map_width: usize,
     map_height: usize,
+    stamina: u32,
+    score: u32,
+    message: Option<String>,
 }
 
 impl GameState {
@@ -215,6 +278,56 @@ impl GameState {
             object_count += 1;
         }
         
+        // 生成食物 (map_width * map_height / 50)
+        let food_target = (map_width * map_height / 50).max(2);
+        let mut food_count = 0;
+        let food_kinds = [FoodKind::Apple, FoodKind::Banana, FoodKind::Bread, FoodKind::Chicken, FoodKind::Cake];
+        while food_count < food_target {
+            let rand_x = js_sys::Math::random();
+            let rand_y = js_sys::Math::random();
+            let rand_kind = js_sys::Math::random();
+            if rand_x.is_nan() || rand_x.is_infinite() || rand_y.is_nan() || rand_y.is_infinite() || rand_kind.is_nan() || rand_kind.is_infinite() {
+                continue;
+            }
+            let x = ((rand_x * map_width as f64) as usize).min(map_width - 1);
+            let y = ((rand_y * map_height as f64) as usize).min(map_height - 1);
+            if used_positions.contains(&(x, y)) { continue; }
+            let kind_idx = ((rand_kind * food_kinds.len() as f64) as usize).min(food_kinds.len() - 1);
+            let kind = food_kinds[kind_idx].clone();
+            entities.push(Entity {
+                entity_type: EntityType::Food { eaten: false, kind: kind.clone() },
+                x,
+                y,
+                symbol: kind.symbol(false),
+                color: kind.color(false),
+            });
+            used_positions.insert((x, y));
+            food_count += 1;
+        }
+        
+        // 生成宝箱 (map_width * map_height / 80)
+        let chest_target = (map_width * map_height / 80).max(1);
+        let mut chest_count = 0;
+        while chest_count < chest_target {
+            let rand_x = js_sys::Math::random();
+            let rand_y = js_sys::Math::random();
+            if rand_x.is_nan() || rand_x.is_infinite() || rand_y.is_nan() || rand_y.is_infinite() {
+                continue;
+            }
+            let x = ((rand_x * map_width as f64) as usize).min(map_width - 1);
+            let y = ((rand_y * map_height as f64) as usize).min(map_height - 1);
+            if used_positions.contains(&(x, y)) { continue; }
+            entities.push(Entity {
+                entity_type: EntityType::Chest { opened: false },
+                x,
+                y,
+                symbol: '□',
+                color: "#ffcc66",
+            });
+            used_positions.insert((x, y));
+            chest_count += 1;
+        }
+        
         let mut state = Self {
             player_x: map_width / 2,
             player_y: map_height / 2,
@@ -225,6 +338,9 @@ impl GameState {
             map,
             map_width,
             map_height,
+            stamina: 20,
+            score: 0,
+            message: None,
         };
         state.update_discovered_area();
         state
@@ -246,6 +362,7 @@ impl GameState {
     }
     
     fn move_player(&mut self, dx: isize, dy: isize) {
+        if self.stamina == 0 { return; }
         let new_x = self.player_x as isize + dx;
         let new_y = self.player_y as isize + dy;
         
@@ -254,22 +371,47 @@ impl GameState {
             self.player_y = new_y as usize;
             self.update_discovered_area();
             self.check_for_items();
+            if self.stamina > 0 {
+                self.stamina -= 1;
+            }
         }
     }
     
     fn check_for_items(&mut self) {
         for entity in &mut self.entities {
-            if let EntityType::Object { collected: ref mut c } = entity.entity_type {
-                if !*c && entity.x == self.player_x && entity.y == self.player_y {
-                    *c = true;
-                    self.items_collected += 1;
-                }
+            match &mut entity.entity_type {
+                EntityType::Object { collected } => {
+                    if !*collected && entity.x == self.player_x && entity.y == self.player_y {
+                        *collected = true;
+                        self.items_collected += 1;
+                    }
+                },
+                EntityType::Food { eaten, kind } => {
+                    if !*eaten && entity.x == self.player_x && entity.y == self.player_y {
+                        *eaten = true;
+                        self.stamina += kind.stamina();
+                        self.message = Some(format!("你吃了{}，体力+{}！", kind.name(), kind.stamina()));
+                    }
+                },
+                EntityType::Chest { opened } => {
+                    if !*opened && entity.x == self.player_x && entity.y == self.player_y {
+                        *opened = true;
+                        self.score += 10;
+                        self.message = Some("你打开了宝箱，获得10分！".to_string());
+                    }
+                },
+                _ => {}
             }
         }
     }
     
     fn get_progress(&self) -> u32 {
-        ((self.items_collected as f64 / 25.0) * 100.0).min(100.0) as u32
+        let total_objects = self.entities.iter().filter(|e| matches!(e.entity_type, EntityType::Object { .. })).count();
+        if total_objects == 0 {
+            100
+        } else {
+            ((self.items_collected as f64 / total_objects as f64) * 100.0).min(100.0) as u32
+        }
     }
 }
 
@@ -392,9 +534,9 @@ pub fn Game() -> Element {
                         let draw_x = x as f64 * tile_size;
                         let draw_y = y as f64 * tile_size;
                         if !game_state.discovered.contains(&(x, y)) {
-                            ctx.set_fill_style(&FOG_COLOR.into());
+                            ctx.set_fill_style_str(FOG_COLOR);
                             ctx.fill_rect(draw_x, draw_y, tile_size, tile_size);
-                            ctx.set_fill_style(&"rgba(80, 80, 130, 0.8)".into());
+                            ctx.set_fill_style_str("rgba(80, 80, 130, 0.8)");
                             ctx.set_font(&format!("{}px monospace", tile_size));
                             ctx.set_text_align("center");
                             ctx.set_text_baseline("middle");
@@ -403,7 +545,7 @@ pub fn Game() -> Element {
                         }
                         // 优先级：玩家 > 实体 > 地形
                         if game_state.player_x == x && game_state.player_y == y {
-                            ctx.set_fill_style(&PLAYER_COLOR.into());
+                            ctx.set_fill_style_str(PLAYER_COLOR);
                             ctx.set_font(&format!("{}px monospace", tile_size));
                             ctx.set_text_align("center");
                             ctx.set_text_baseline("middle");
@@ -414,24 +556,38 @@ pub fn Game() -> Element {
                             ).ok();
                             continue;
                         }
-                        if let Some(entity) = game_state.entities.iter().find(|e| e.x == x && e.y == y && match e.entity_type { EntityType::Object { collected } => !collected, _ => true }) {
-                            ctx.set_fill_style(&entity.color.into());
+                        if let Some(entity) = game_state.entities.iter().find(|e| e.x == x && e.y == y && match e.entity_type { EntityType::Object { collected } => !collected, EntityType::Food { eaten: _, kind: _ } => true, EntityType::Chest { opened } => true, _ => true }) {
+                            // 食物和宝箱根据状态显示不同符号
+                            let (symbol, color) = match &entity.entity_type {
+                                EntityType::Food { eaten, kind } => {
+                                    (kind.symbol(*eaten), kind.color(*eaten))
+                                },
+                                EntityType::Chest { opened } => {
+                                    if *opened {
+                                        ('▣', "#cccc99")
+                        } else {
+                                        ('□', "#ffcc66")
+                                    }
+                                },
+                                _ => (entity.symbol, entity.color)
+                            };
+                            ctx.set_fill_style_str(color);
                             ctx.set_font(&format!("{}px monospace", tile_size));
                             ctx.set_text_align("center");
                             ctx.set_text_baseline("middle");
-                            ctx.fill_text(&entity.symbol.to_string(), draw_x + tile_size / 2.0, draw_y + tile_size / 2.0).ok();
+                            ctx.fill_text(&symbol.to_string(), draw_x + tile_size / 2.0, draw_y + tile_size / 2.0).ok();
                             continue;
                         }
                         // 地形
                         let terrain = game_state.map[y][x];
-                        ctx.set_fill_style(&"#0a0a15".into());
+                        ctx.set_fill_style_str("#0a0a15");
                         ctx.fill_rect(draw_x, draw_y, tile_size, tile_size);
-                        ctx.set_fill_style(&terrain.color().into());
+                        ctx.set_fill_style_str(terrain.color());
                         ctx.set_font(&format!("{}px monospace", tile_size));
                                 ctx.set_text_align("center");
                                 ctx.set_text_baseline("middle");
                         ctx.fill_text(terrain.symbol(), draw_x + tile_size / 2.0, draw_y + tile_size / 2.0).ok();
-                        ctx.set_fill_style(&DISCOVERED_COLOR.into());
+                        ctx.set_fill_style_str(DISCOVERED_COLOR);
                         ctx.set_font(&format!("{}px monospace", tile_size));
                         ctx.fill_text(DISCOVERED_SYMBOL, draw_x + tile_size / 2.0, draw_y + tile_size / 2.0).ok();
                     }
@@ -548,6 +704,27 @@ pub fn Game() -> Element {
         });
     }
 
+    // 弹窗自动消失
+    {
+        let mut state = state.clone();
+        use_effect(move || {
+            if state().message.is_some() {
+                let window = match window() { Some(w) => w, None => return };
+                let closure = Closure::wrap(Box::new(move || {
+                    let mut s = state();
+                    s.message = None;
+                    state.set(s);
+                }) as Box<dyn FnMut()>);
+                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    closure.as_ref().unchecked_ref(),
+                    1500
+                );
+                closure.forget();
+            }
+            ()
+        });
+    }
+
     // UI 数据
     let progress = {
         let state = state.clone();
@@ -557,13 +734,35 @@ pub fn Game() -> Element {
         let state = state.clone();
         move || state().items_collected.to_string()
     };
+    let stamina = {
+        let state = state.clone();
+        move || state().stamina.to_string()
+    };
+    let score = {
+        let state = state.clone();
+        move || state().score.to_string()
+    };
+    let message = {
+        let state = state.clone();
+        move || state().message.clone()
+    };
+
+    let message_node = {
+        if let Some(msg) = message() {
+    rsx! {
+                div { class: "fixed left-1/2 top-10 -translate-x-1/2 bg-[#222244] text-[#ffcc00] px-6 py-3 rounded shadow-lg z-50 border border-[#ffcc00] text-lg animate-bounce", {msg} }
+            }
+        } else {
+            rsx! {}
+        }
+    };
 
     rsx! {
         div { class: "flex flex-col md:flex-row h-screen overflow-hidden bg-gradient-to-br from-[#1a1a2e] to-[#16213e]",
             // 左侧flex-1容器，canvas自适应父容器
             div { id: canvas_container_id, class: "flex-1 h-full relative",
-                canvas {
-                    id: "gameCanvas",
+                    canvas {
+                        id: "gameCanvas",
                     width: canvas_width(),
                     height: canvas_height(),
                     class: "block w-full h-full bg-[#0a0a15]",
@@ -605,6 +804,8 @@ pub fn Game() -> Element {
                 div { class: "stats mb-4 md:mb-6 text-white text-sm md:text-base",
                     div { class: "stat-item flex justify-between py-1 md:py-2 border-b border-dashed border-[#33335f]", span {"探索进度:"} span { id: "progress", {progress()} } }
                     div { class: "stat-item flex justify-between py-1 md:py-2 border-b border-dashed border-[#33335f]", span {"已发现物品:"} span { id: "items", {items()} } }
+                    div { class: "stat-item flex justify-between py-1 md:py-2 border-b border-dashed border-[#33335f]", span {"体力:"} span { id: "stamina", {stamina()} } }
+                    div { class: "stat-item flex justify-between py-1 md:py-2 border-b border-dashed border-[#33335f]", span {"分数:"} span { id: "score", {score()} } }
                     div { class: "stat-item flex justify-between py-1 md:py-2 border-b border-dashed border-[#33335f]", span {"游戏时间:"} span { id: "time", {game_time()} } }
                 }
                 div { class: "controls mb-4 md:mb-6 hidden md:block",
@@ -622,6 +823,12 @@ pub fn Game() -> Element {
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol animal-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ff6666]", "$" } span { "动物" } }
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol plant-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#66cc66]", "%" } span { "植物" } }
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol object-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#6699ff]", "!" } span { "物体" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol food-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ff3333]", "🍎" } span { "苹果（+5体力）" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol food-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ffe066]", "🍌" } span { "香蕉（+8体力）" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol food-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#e0b97d]", "🍞" } span { "面包（+10体力）" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol food-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ffbb66]", "🍗" } span { "鸡腿（+15体力）" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol food-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ffb3e6]", "🍰" } span { "蛋糕（+20体力）" } }
+                    div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol chest-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#ffcc66]", "□" } span { "宝箱（获得分数）" } }
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol tree-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#336633]", "↑" } span { "树" } }
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol river-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#3366cc]", "≈" } span { "河流" } }
                     div { class: "legend-item flex items-center mb-1 md:mb-2 p-1 rounded bg-[#1e1e32]/50", div { class: "symbol mountain-symbol w-[20px] h-[20px] md:w-[30px] md:h-[30px] flex items-center justify-center text-sm md:text-xl mr-2 bg-black/30 rounded text-[#888888]", "^" } span { "山" } }
@@ -630,6 +837,7 @@ pub fn Game() -> Element {
                 }
                 div { class: "message bg-black/60 border-l-4 border-[#ffcc00] p-2 md:p-3 mt-2 md:mt-4 text-xs md:text-sm rounded-r-lg text-gray-100", "探索迷雾区域可以发现各种符号物体！收集它们以完成你的冒险。" }
                 button { class: "action-btn mt-3 md:mt-4 w-full bg-gradient-to-b from-[#4d4d99] to-[#333366] text-white py-2 rounded shadow hover:from-[#5d5da9] hover:to-[#434376] transition text-sm md:text-base", onclick: move |_| restart(), id: "restartBtn", "重新开始游戏" }
+                {message_node}
             }
         }
     }
