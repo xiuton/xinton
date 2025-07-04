@@ -1,0 +1,62 @@
+# Liwin 应用配置文件
+# 这个文件展示了如何在 Dioxus 应用中使用 TOML 配置文件
+
+[app]
+name = "Liwin Demo"
+version = "1.0.0"
+description = "Dioxus + TailwindCSS 配置管理演示应用"
+
+[server]
+host = "127.0.0.1"
+port = 3000
+debug = true
+
+[database]
+url = "sqlite:./data/demo.db"
+pool_size = 5
+
+[features]
+# 启用或禁用功能
+auth = true
+api = true
+websocket = false
+caching = true
+
+[ui]
+# UI 相关配置
+theme = "light"  # light, dark, auto
+language = "zh-CN"
+timezone = "Asia/Shanghai"
+
+[logging]
+level = "info"  # debug, info, warn, error
+file = "./logs/demo.log"
+max_size = "5MB"
+max_files = 3
+
+[security]
+# 安全相关配置
+session_timeout = 1800  # 30分钟
+max_login_attempts = 3
+password_min_length = 6
+
+[email]
+# 邮件配置
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+smtp_username = "demo@example.com"
+smtp_password = "demo-password"
+from_address = "noreply@demo.com"
+
+[storage]
+# 文件存储配置
+type = "local"  # local, s3, gcs
+path = "./uploads"
+max_file_size = "5MB"
+allowed_types = ["jpg", "png", "gif", "pdf"]
+
+[analytics]
+# 分析配置
+enabled = true
+provider = "google"  # google, mixpanel, custom
+tracking_id = "DEMO-123456" 

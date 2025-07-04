@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liwin - Rust + Dioxus + TailwindCSS</title>
+    <meta name="description" content="一个基于 Rust + Dioxus + TailwindCSS 的现代化 Web 应用模板">
+    
+    <!-- 构建后的 TailwindCSS -->
+    <link rel="stylesheet" href="./styles/output.css">
+    
+    <!-- 图标 -->
+    <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg">
+    <link rel="icon" type="image/png" href="./icons/favicon.png">
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+    <div id="main"></div>
+    
+    <!-- 加载脚本 -->
+    <script type="module">
+        import init, { main } from './pkg/xiuton.js';
+        
+        async function run() {
+            try {
+            await init();
+            main();
+            } catch (error) {
+                console.error('Failed to initialize WASM:', error);
+            }
+        }
+        
+        run();
+    </script>
+    
+    <!-- 开发环境热重载 -->
+    <script>
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            const ws = new WebSocket('ws://localhost:8080');
+            ws.onmessage = function(event) {
+                if (event.data === 'reload') {
+                    window.location.reload();
+                }
+            };
+        }
+    </script>
+</body>
+</html> 

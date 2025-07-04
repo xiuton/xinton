@@ -1,0 +1,62 @@
+# Liwin 应用配置文件示例
+# 复制此文件为 config.toml 并根据需要修改
+
+[app]
+name = "Liwin"
+version = "0.1.0"
+description = "A modern web application template"
+
+[server]
+host = "127.0.0.1"
+port = 8080
+debug = true
+
+[database]
+url = "sqlite:./data/app.db"
+pool_size = 10
+
+[features]
+# 启用或禁用功能
+auth = true
+api = true
+websocket = false
+caching = true
+
+[ui]
+# UI 相关配置
+theme = "light"  # light, dark, auto
+language = "zh-CN"
+timezone = "Asia/Shanghai"
+
+[logging]
+level = "info"  # debug, info, warn, error
+file = "./logs/app.log"
+max_size = "10MB"
+max_files = 5
+
+[security]
+# 安全相关配置
+session_timeout = 3600  # 秒
+max_login_attempts = 5
+password_min_length = 8
+
+[email]
+# 邮件配置
+smtp_host = "smtp.example.com"
+smtp_port = 587
+smtp_username = "your-email@example.com"
+smtp_password = "your-password"
+from_address = "noreply@example.com"
+
+[storage]
+# 文件存储配置
+type = "local"  # local, s3, gcs
+path = "./uploads"
+max_file_size = "10MB"
+allowed_types = ["jpg", "png", "pdf", "doc"]
+
+[analytics]
+# 分析配置
+enabled = false
+provider = "google"  # google, mixpanel, custom
+tracking_id = "" 

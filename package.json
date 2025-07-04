@@ -1,0 +1,40 @@
+{
+  "name": "xiuton",
+  "version": "0.1.0",
+  "description": "A modern web application template built with Rust + Dioxus + TailwindCSS",
+  "main": "index.js",
+  "scripts": {
+    "build:css:watch": "npx @tailwindcss/cli -i ./styles/input.css -o ./public/styles/output.css --watch",
+    "build:css:prod": "npx @tailwindcss/cli -i ./styles/input.css -o ./public/styles/output.css --minify",
+    "build:css:dev": "npx @tailwindcss/cli -i ./styles/input.css -o ./public/styles/output.css",
+    "build:rust": "wasm-pack build --target web --out-dir public/pkg",
+    "build:rust:prod": "wasm-pack build --target web --out-dir public/pkg --release",
+    "build": "pnpm run build:css:dev && pnpm run build:rust",
+    "build:prod": "pnpm run build:css:prod && pnpm run build:rust:prod",
+    "dev": "concurrently \"pnpm run serve\" \"pnpm run watch:build\"",
+    "serve": "serve -s public -p 8080",
+    "clean:css": "pnpm exec rimraf public/styles/output.css",
+    "clean:pkg": "pnpm exec rimraf public/pkg && pnpm exec rimraf pkg",
+    "clean:rust": "cargo clean",
+    "clean": "pnpm run clean:css && pnpm run clean:pkg && pnpm run clean:rust",
+    "watch:build": "nodemon --watch src --watch styles --ext rs,css --exec \"pnpm run build\""
+  },
+  "keywords": [
+    "rust",
+    "dioxus",
+    "tailwindcss",
+    "wasm",
+    "web",
+    "template"
+  ],
+  "author": "gantoho",
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.10",
+    "concurrently": "^9.2.0",
+    "nodemon": "^3.0.2",
+    "rimraf": "^5.0.5",
+    "serve": "^14.2.1",
+    "tailwindcss": "^4.1.10"
+  }
+}
